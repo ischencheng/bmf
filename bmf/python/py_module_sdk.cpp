@@ -218,7 +218,13 @@ struct PyPacketQueue {
 void bmf_ffmpeg_bind(py::module &m) {
     using namespace bmf_sdk;
     auto ff = m.def_submodule("ffmpeg");
-    ff.def("siso_filter", [](VideoFrame &vf, const std::string &filter_str) {
+
+    ff.def("to_format_str", [](hmp::PixelFormat format){
+        //BMFLOG(BMF_INFO) << "pf format: " << format;
+        return hmp::ffmpeg::hmp_to_ffmpeg_format_str(format);
+    });
+
+    ff.def_nogil("siso_filter", [](VideoFrame &vf, const std::string &filter_str) {
         auto new_vf = ffmpeg::siso_filter(vf, filter_str);
         return py::cast(new_vf);
     });
@@ -226,12 +232,12 @@ void bmf_ffmpeg_bind(py::module &m) {
     py::class_<SimpleFilterGraph>(ff, "SimpleFilterGraph")
         .def(py::init<>());
 
-    ff.def("init_reformat_filter", [](const VideoFrame& vf, const std::string& format,
+    ff.def_nogil("init_reformat_filter", [](const VideoFrame& vf, const std::string& format,
                                       const std::string& flags = "") {
         return bmf_sdk::ffmpeg::init_reformat_filter(vf, format, flags);
     }, py::arg("vf"), py::arg("format"), py::arg("flags") = "");
 
-    ff.def("reformat", [](const VideoFrame& vf, const std::string& format_str,
+    ff.def_nogil("reformat", [](const VideoFrame& vf, const std::string& format_str,
                          SimpleFilterGraph filter_graph = SimpleFilterGraph(),
                          const std::string& flags = "") {
         return bmf_sdk::ffmpeg::reformat(vf, format_str, filter_graph, flags);
@@ -364,6 +370,8 @@ void module_sdk_bind(py::module &m) {
         .def_property("pts", &SequenceData::pts, &SequenceData::set_pts)
         .def_property("time_base", &SequenceData::time_base,
                       &SequenceData::set_time_base)
+        .def_property("pkt_duration", &SequenceData::pkt_duration,
+                        &SequenceData::set_pkt_duration)
         .def("copy_props", &SequenceData::copy_props, py::arg("from"));
 
     // Future
@@ -402,6 +410,9 @@ void module_sdk_bind(py::module &m) {
         .def("copy_props", &VideoFrame::copy_props, py::arg("from"),
              py::arg("copy_private") = false)
         .def("reformat", &VideoFrame::reformat, py::arg("pix_info"))
+        .def("clone", [](const VideoFrame& self) {
+            return VideoFrame(self); // call copy construct function
+        })
         .def("as_contiguous_storage", &VideoFrame::as_contiguous_storage);
     PACKET_REGISTER_BMF_SDK_TYPE(VideoFrame)
 

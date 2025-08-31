@@ -172,6 +172,26 @@ class PyModule : public Module {
             json_param = JsonParam(json_str);
         });
     }
+
+    bool report_user_df_data(JsonParam &json_param) override {
+        py::gil_scoped_acquire gil;
+        try {            
+            auto ret = call_func("report_user_df_data");
+            if (!ret.is_none()) {
+                if (!py::isinstance<py::dict>(ret)) {
+                    throw std::runtime_error("report_user_df_data must return dict type");
+                }
+                
+                json_param = std::move(py::cast<JsonParam>(ret));
+                return true;
+            }
+        } catch (const std::exception &e) {
+            BMFLOG(BMF_ERROR) << "Python report_user_df_data error: " << e.what();
+            throw;
+        }
+        return false;
+    }
+
 };
 #pragma GCC visibility pop
 
@@ -185,10 +205,13 @@ class PyModuleFactory : public ModuleFactoryI {
 
     std::shared_ptr<Module> make(int32_t node_id,
                                  const JsonParam &json_param) override {
+        StatTimer timer(bmf_stat_enabled());                             
         py::gil_scoped_acquire gil;
         auto [module_cls, _] = factory_();
-        return std::make_shared<bmf_sdk::PyModule>(module_cls, node_id,
+        auto module = std::make_shared<bmf_sdk::PyModule>(module_cls, node_id,
                                                    json_param);
+        module->create_time_ = timer.elapsed();
+        return module;
     }
 
     const bool module_info(ModuleInfo &info) const override {

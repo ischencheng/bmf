@@ -1,5 +1,5 @@
 {
-  "mode": "aesmod_module,ocr_crop,llm_caption",
+  "mode": "ocr_crop,llm_caption",
   "output_path": "clip_output",
   "output_configs": [
     {
@@ -25,7 +25,8 @@
     "options": {
       "batch_size": 6,
       "multithreading": false,
-      "pass_through": true
+      "pass_through": true,
+      "model": "Deepseek_VL2"
     }
   }
 }

@@ -22,12 +22,15 @@
 
 #include <bmf/sdk/log.h>
 #include <bmf/sdk/trace.h>
+#include <bmf/sdk/bmf_stat.h>
 
 #include <csignal>
 #include <iomanip>
 #include <iostream>
 
 #include <unistd.h>
+
+#include <uuid.h>
 
 BEGIN_BMF_ENGINE_NS
 USE_BMF_SDK_NS
@@ -55,6 +58,21 @@ Graph::Graph(
     BMFLOG(BMF_INFO) << "BMF Version: " << BMF_VERSION;
     BMFLOG(BMF_INFO) << "BMF Commit: " << BMF_COMMIT;
     BMFLOG(BMF_INFO) << "start init graph";
+
+    if (bmf_stat_enabled()){
+        auto id = uuids::uuid_system_generator{}();
+        uuid_ = uuids::to_string(id);
+        auto sd = std::make_shared<GraphStartData>();
+
+        graph_start_time_ = bmf_get_time();
+        sd->start_timestamp = graph_start_time_;
+        sd->version = BMF_VERSION;
+        sd->commit = BMF_COMMIT;
+        sd->graph_uuid = uuid_;
+
+        bmf_stat_report(sd);
+    }
+
     BMF_TRACE(GRAPH_START, "Init");
     init(graph_config, pre_modules, callback_bindings);
     g_ptr.push_back(this);
@@ -153,6 +171,14 @@ void Graph::init(
 
     for (auto &node : source_nodes_)
         scheduler_->add_or_remove_node(node->get_id(), true);
+    
+    if (bmf_stat_enabled()) {
+        auto &stat = BMFStat::GetInstance();
+        std::string user_id = graph_config.get_user_id();
+        stat.set_user_id(user_id);
+        BMFLOG(BMF_INFO) << "bmf_stat set user_id to " << user_id;
+    }
+
 }
 
 int Graph::get_hungry_check_func(std::shared_ptr<Node> &root_node,
@@ -220,7 +246,7 @@ int Graph::init_nodes() {
                 std::make_shared<ModuleCallbackLayer>();
         node = std::make_shared<Node>(node_id, node_config, callback,
                                       module_pre_allocated, mode_,
-                                      callback_bindings_[node_id]);
+                                      callback_bindings_[node_id], uuid_);
 
         if (node_config.get_scheduler() < scheduler_count_) {
             node->set_scheduler_queue_id((node_config.get_scheduler()));
@@ -448,7 +474,7 @@ int Graph::update(GraphConfig update_config) {
                     std::make_shared<ModuleCallbackLayer>();
             node = std::make_shared<Node>(node_id, node_config, callback,
                                           module_pre_allocated, mode_,
-                                          callback_bindings_[node_id]);
+                                          callback_bindings_[node_id], uuid_);
 
             if (node_config.get_scheduler() < scheduler_count_) {
                 node->set_scheduler_queue_id((node_config.get_scheduler()));
@@ -848,12 +874,27 @@ int Graph::close() {
                   << std::endl;
 
     g_ptr.clear();
+
     if (scheduler_->eptr_) {
         auto graph_info = status();
         std::cerr << "Graph status when exception occured: "
                   << graph_info.jsonify().dump() << std::endl;
         std::rethrow_exception(scheduler_->eptr_);
     }
+
+    //report
+    if (bmf_stat_enabled()) {
+        auto sd = std::make_shared<GraphEndData>();
+
+        sd->start_timestamp = graph_start_time_;
+        graph_end_time_ = bmf_get_time();
+        sd->end_timestamp = graph_end_time_;
+        sd->err = exception_from_scheduler_ ? 1 : 0;
+        sd->graph_str = graph_config_.to_json().dump();
+        sd->graph_uuid = uuid_;
+        bmf_stat_report(sd);
+    }
+    
     return 0;
 }
 
@@ -870,6 +911,18 @@ int Graph::force_close() {
         node.second->close();
     }
     scheduler_->close();
+    //report
+    if (bmf_stat_enabled()) {
+        auto sd = std::make_shared<GraphEndData>();
+
+        sd->start_timestamp = graph_start_time_;
+        graph_end_time_ = bmf_get_time();
+        sd->end_timestamp = graph_end_time_;
+        sd->err = exception_from_scheduler_ ? 1 : 0;
+        sd->graph_str = graph_config_.to_json().dump();
+        sd->graph_uuid = uuid_;
+        bmf_stat_report(sd);
+    }
     return 0;
 }
 

@@ -314,12 +314,26 @@ CFFDecoder::CFFDecoder(int node_id, JsonParam option) {
 
     /** @addtogroup DecM
      * @{
-     * @arg hwaccel: hardware accelete exp. cuda.
-     * @arg extract_frames: support extract frames with given fps and device.
+     * @arg video_params: video codec parameters which similar as
+      ffmpeg. exp.
+     * @code
+            "video_params": {
+                "hwaccel": "cuda",
+                "extract_frames": {
+                    "fps": 25,
+                    "device": "0",
+                }
+            },
+     * @endcode
      * @} */
     if (option.has_key("video_params")) {
         JsonParam video_params;
         option.get_object("video_params", video_params);
+        /** @addtogroup DecM
+         * @{
+         * @arg hwaccel: hardware accelete exp. cuda.
+         * @arg extract_frames: support extract frames with given fps and device.
+         * @} */
         if (video_params.has_key("hwaccel")) {
             video_params.get_string("hwaccel", hwaccel_str_);
         }
@@ -356,6 +370,11 @@ CFFDecoder::CFFDecoder(int node_id, JsonParam option) {
     /** @addtogroup DecM
      * @{
      * @arg dec_params: set the decode codec parameters, such as "threads": 1
+     * @code
+            "dec_params": {
+                "threads": 1,
+            },
+     * @endcode
      * @} */
     AVDictionary *opts = NULL;
     if (option.has_key("dec_params")) {
@@ -2573,6 +2592,48 @@ int CFFDecoder::process(Task &task) {
     if (task_done_)
         task.set_timestamp(DONE);
     return PROCESS_OK;
+}
+
+
+bool CFFDecoder::report_user_df_data(JsonParam &json_param) {
+    nlohmann::json a_data, v_data, in_if;
+    AVCodecParameters *codec_par;
+    bool has_data = false;
+    if (video_stream_index_ != -1 && video_stream_ && video_stream_->codecpar) {
+        has_data = true;
+        codec_par = video_stream_->codecpar;
+        v_data["video_stream_index"] = video_stream_index_;
+        v_data["codec_type"] = av_get_media_type_string(codec_par->codec_type);
+        v_data["codec_name"] = avcodec_get_name(codec_par->codec_id);
+        v_data["width"] = codec_par->width;
+        v_data["height"] = codec_par->height;
+        v_data["pix_fmt"] = av_get_pix_fmt_name((AVPixelFormat)codec_par->format);
+        v_data["color_space"] = codec_par->color_space == AVCOL_SPC_UNSPECIFIED ? "unknown" : av_color_space_name(codec_par->color_space);
+        v_data["avg_frame_rate"] = av_q2d(video_stream_->avg_frame_rate);
+        v_data["duration"] = video_stream_->duration;
+        v_data["bit_rate"] = codec_par->bit_rate;
+        v_data["time_base"] = av_q2d(video_stream_->time_base);
+        in_if["video_stream"] = v_data;
+    }
+    if (audio_stream_index_!= -1 && audio_stream_ && audio_stream_->codecpar) {
+        has_data = true;
+        codec_par = audio_stream_->codecpar;
+        a_data["audio_stream_index"] = audio_stream_index_;
+        a_data["codec_type"] = av_get_media_type_string(codec_par->codec_type);
+        a_data["codec_name"] = avcodec_get_name(codec_par->codec_id);
+        a_data["sample_rate"] = codec_par->sample_rate;
+        a_data["channels"] = codec_par->channels;
+        a_data["sample_fmt"] = av_get_sample_fmt_name((AVSampleFormat)codec_par->format);
+        a_data["channel_layout"] = codec_par->channel_layout;
+        a_data["duration"] = audio_stream_->duration;
+        a_data["bit_rate"] = codec_par->bit_rate;
+        in_if["audio_stream"] = a_data;
+    }
+    if (has_data){
+        json_param.json_value_["in_if"] = in_if;
+    }
+    
+    return has_data;
 }
 
 REGISTER_MODULE_CLASS(CFFDecoder)

@@ -145,11 +145,14 @@ class BMF_SDK_API Module {
      * @param hints hints pass to stats caculation
      * @return int32_t
      */
-    virtual int32_t report(JsonParam &json_param, int hints = 0) { return 0; };
+    virtual bool report_user_df_data(JsonParam &json_param) { return false; };
 
     virtual ~Module(){};
 
     int32_t node_id_ = -1;
+
+    // use for bmf_stat
+    int64_t create_time_ = 0;
 };
 
 } // namespace bmf_sdk

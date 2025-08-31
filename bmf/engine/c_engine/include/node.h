@@ -22,6 +22,7 @@
 #include <bmf/sdk/module.h>
 #include <bmf/sdk/exception_factory.h>
 #include <bmf/sdk/error_define.h>
+#include <bmf/sdk/bmf_stat.h>
 
 #include "module_factory.h"
 #include "graph_config.h"
@@ -54,7 +55,7 @@ class Node {
   public:
     Node(int node_id, NodeConfig &node_config, NodeCallBack &callback,
          std::shared_ptr<Module> pre_allocated_modules, BmfMode mode,
-         std::shared_ptr<ModuleCallbackLayer> callbacks);
+         std::shared_ptr<ModuleCallbackLayer> callbacks, const std::string &graph_uuid = "");
 
     int process_node(Task &task);
 
@@ -187,6 +188,11 @@ class Node {
     NodeCallBack callback_;
     std::map<int, std::vector<std::function<bool()>>> hungry_check_func_;
     bool enable_hungry_check_ = false;
+
+    // used for BMFStat
+    bool enable_stat_ = bmf_stat_enabled();
+    ModuleData module_stat_data_;
+    std::string graph_uuid_;
 };
 END_BMF_ENGINE_NS
 
